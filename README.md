@@ -2,14 +2,15 @@
 
 ## Current version
 
-**Version: 9.1**
+**Version: 9.2**
 
-**1 October, 2025**
+**5 November, 2025**
 
-**SHA256:** ECE2366421C7FEA43956BD49983B38E7957A8E935AAE581C0822BDE3531FDE63
+**SHA256:** 205206771C9458DC207CEC664C6C7667A7F968380FF5A4E0543D65E941BB2901
 
 **Fixes**
-* Fetching accounts from a different domain for Effective Permissions now works.
+* Filter on trustee was broken
+
 
 
 ## Examples

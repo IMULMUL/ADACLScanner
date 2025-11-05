@@ -105,12 +105,12 @@
 
 .NOTES
 
-**Version: 9.1**
+**Version: 9.2**
 
-**1 October, 2025**
+**5 November, 2025**
 
 **Fixes**
-* Fetching accounts from a different domain for Effecitive Permissions now works.
+* Filter on trustee was broken
 
 
 #>
@@ -526,7 +526,7 @@ Param
 
 )
 
-[string]$ADACLScanVersion = "-------`nAD ACL Scanner 9.1 , Author: Robin Granberg, @ipcdollar1, Github: github.com/canix1 `n-------"
+[string]$ADACLScanVersion = "-------`nAD ACL Scanner 9.2 , Author: Robin Granberg, @ipcdollar1, Github: github.com/canix1 `n-------"
 [string]$global:SessionID = [GUID]::NewGuid().Guid
 [string]$global:ACLHTMLFileName = "ACLHTML-$SessionID"
 [string]$global:SPNHTMLFileName = "SPNHTML-$SessionID"
@@ -840,7 +840,7 @@ $xamlBase = @'
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
                                 <StackPanel Orientation="Vertical" >
                                     <StackPanel Orientation="Horizontal" >
-                                        <Label x:Name="lblStyleVersion1" Content="AD ACL Scanner 9.1" HorizontalAlignment="Left" Height="25" Margin="0,0,0,0" VerticalAlignment="Top" Width="140" Foreground="#FF46724C" Background="{x:Null}" FontWeight="Bold" FontSize="14"/>
+                                        <Label x:Name="lblStyleVersion1" Content="AD ACL Scanner 9.2" HorizontalAlignment="Left" Height="25" Margin="0,0,0,0" VerticalAlignment="Top" Width="140" Foreground="#FF46724C" Background="{x:Null}" FontWeight="Bold" FontSize="14"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" >
                                         <Label x:Name="lblStyleVersion2" Content="written by Robin Granberg " HorizontalAlignment="Left" Height="27" Margin="0,0,0,0" VerticalAlignment="Top" Width="150" Foreground="White" Background="{x:Null}" FontSize="12"/>
@@ -12492,7 +12492,7 @@ Function Get-Perm {
                 $RecursiveData = $null
             }
             
-            If (($FilterTrustee -eq $true) -and ($bolEffectiveR -eq $false)) {
+            If (($FilterTrustee) -and ($bolEffectiveR -eq $false)) {
                 if ($FilterTrustee.Length -gt 0) {
                     $sd = @($sd | Where-Object { if ($_.IdentityReference -like 'S-1-*') {
 `
