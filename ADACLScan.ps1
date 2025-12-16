@@ -105,12 +105,12 @@
 
 .NOTES
 
-**Version: 9.2**
+**Version: 9.3**
 
-**5 November, 2025**
+**16 December, 2025**
 
 **Fixes**
-* Filter on trustee was broken
+* Updated Criticality function
 
 
 #>
@@ -526,7 +526,7 @@ Param
 
 )
 
-[string]$ADACLScanVersion = "-------`nAD ACL Scanner 9.2 , Author: Robin Granberg, @ipcdollar1, Github: github.com/canix1 `n-------"
+[string]$ADACLScanVersion = "-------`nAD ACL Scanner 9.3 , Author: Robin Granberg, @ipcdollar1, Github: github.com/canix1 `n-------"
 [string]$global:SessionID = [GUID]::NewGuid().Guid
 [string]$global:ACLHTMLFileName = "ACLHTML-$SessionID"
 [string]$global:SPNHTMLFileName = "SPNHTML-$SessionID"
@@ -840,7 +840,7 @@ $xamlBase = @'
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
                                 <StackPanel Orientation="Vertical" >
                                     <StackPanel Orientation="Horizontal" >
-                                        <Label x:Name="lblStyleVersion1" Content="AD ACL Scanner 9.2" HorizontalAlignment="Left" Height="25" Margin="0,0,0,0" VerticalAlignment="Top" Width="140" Foreground="#FF46724C" Background="{x:Null}" FontWeight="Bold" FontSize="14"/>
+                                        <Label x:Name="lblStyleVersion1" Content="AD ACL Scanner 9.3" HorizontalAlignment="Left" Height="25" Margin="0,0,0,0" VerticalAlignment="Top" Width="140" Foreground="#FF46724C" Background="{x:Null}" FontWeight="Bold" FontSize="14"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" >
                                         <Label x:Name="lblStyleVersion2" Content="written by Robin Granberg " HorizontalAlignment="Left" Height="27" Margin="0,0,0,0" VerticalAlignment="Top" Width="150" Foreground="White" Background="{x:Null}" FontSize="12"/>
@@ -9034,7 +9034,7 @@ Function Get-Criticality {
                     }
                     # Send To =
                     'ab721a55-1e2f-11d0-9819-00aa0040529b' {
-                        $intCriticalityLevel = 4
+                        $intCriticalityLevel = 1
                     }
                     # Open Address List =
                     'a1990816-4298-11d1-ade2-00c04fd8d5cd' {
@@ -9158,7 +9158,7 @@ Function Get-Criticality {
                     }
                     # Enumerate Entire SAM Domain =
                     '91d67418-0135-4acc-8d79-c08e857cfbec' {
-                        $intCriticalityLevel = 4
+                        $intCriticalityLevel = 1
                     }
                     # Generate Resultant Set of Policy (Logging) =
                     'b7b1b3de-ab09-4242-9e30-9980e5d322f7' {
