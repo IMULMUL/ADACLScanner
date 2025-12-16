@@ -2,14 +2,14 @@
 
 ## Current version
 
-**Version: 9.2**
+**Version: 9.3**
 
-**5 November, 2025**
+**16 December, 2025**
 
-**SHA256:** 205206771C9458DC207CEC664C6C7667A7F968380FF5A4E0543D65E941BB2901
+**SHA256:** 622789B2A623F770C6769372356B2E3D1FDD3CAA7AD676F2381C697511516FDF
 
 **Fixes**
-* Filter on trustee was broken
+* Updated Criticality function
 
 
 
