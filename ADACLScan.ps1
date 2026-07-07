@@ -105,12 +105,13 @@
 
 .NOTES
 
-**Version: 9.5**
+**Version: 9.6**
 
-**6 May, 2026**
+**7 July, 2026**
 
 **Fixes**
-* Missing check of Well-Known Sids
+* Bug in returning names to SID
+* Bug in function call, missing parameter name
 
 
 #>
@@ -526,7 +527,7 @@ Param
 
 )
 
-[string]$ADACLScanVersion = "-------`nAD ACL Scanner 9.5 , Author: Robin Granberg, @ipcdollar1, Github: github.com/canix1 `n-------"
+[string]$ADACLScanVersion = "-------`nAD ACL Scanner 9.6 , Author: Robin Granberg, @ipcdollar1, Github: github.com/canix1 `n-------"
 [string]$global:SessionID = [GUID]::NewGuid().Guid
 [string]$global:ACLHTMLFileName = "ACLHTML-$SessionID"
 [string]$global:SPNHTMLFileName = "SPNHTML-$SessionID"
@@ -840,7 +841,7 @@ $xamlBase = @'
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
                                 <StackPanel Orientation="Vertical" >
                                     <StackPanel Orientation="Horizontal" >
-                                        <Label x:Name="lblStyleVersion1" Content="AD ACL Scanner 9.5" HorizontalAlignment="Left" Height="25" Margin="0,0,0,0" VerticalAlignment="Top" Width="140" Foreground="#FF46724C" Background="{x:Null}" FontWeight="Bold" FontSize="14"/>
+                                        <Label x:Name="lblStyleVersion1" Content="AD ACL Scanner 9.6" HorizontalAlignment="Left" Height="25" Margin="0,0,0,0" VerticalAlignment="Top" Width="140" Foreground="#FF46724C" Background="{x:Null}" FontWeight="Bold" FontSize="14"/>
                                     </StackPanel>
                                     <StackPanel Orientation="Horizontal" >
                                         <Label x:Name="lblStyleVersion2" Content="written by Robin Granberg " HorizontalAlignment="Left" Height="27" Margin="0,0,0,0" VerticalAlignment="Top" Width="150" Foreground="White" Background="{x:Null}" FontSize="12"/>
@@ -2222,7 +2223,7 @@ $combObjectDefSD.SelectedValue = 'All Objects'
 
             If ($bolConnected-eq $true) {
                 If (!($strLastCacheGuidsDom -eq $global:strDomainDNName)) {
-                    $global:dicRightsGuids = @{'Seed' = 'xxx' }
+                    $global:dicRightsGuids = @{}
                     CacheRightsGuids -CREDS $CREDS
                     $strLastCacheGuidsDom = $global:strDomainDNName
 
@@ -2416,7 +2417,7 @@ $combObjectDefSD.SelectedValue = 'All Objects'
             Remove-Variable -Name 'dicRightsGuids' -Scope Global
             Remove-Variable -Name 'dicSchemaIDGUIDs' -Scope Global
             Remove-Variable -Name 'dicSidToName' -Scope Global
-            Remove-Variable -Name 'dicWellKnownSids'
+            Remove-Variable -Name 'dicWellKnownSids' -Scope Global
             Remove-Variable -Name 'myPID' -Scope Global
             Remove-Variable -Name 'observableCollection' -Scope Global
             Remove-Variable -Name 'strDomainSelect' -Scope Global
@@ -3467,23 +3468,10 @@ function Get-XMLDomainOUTree {
     return $global:xmlDoc
 }
 
-
-
-
-
-
-
-$global:dicRightsGuids = @{'Seed' = 'xxx' }
-$global:dicSidToName = @{'Seed' = 'xxx' }
-$global:dicSidToObject = @{'Seed' = 'xxx' }
-$global:dicDCSpecialSids = @{'BUILTIN\Incoming Forest Trust Builders' = 'S-1-5-32-557'; `
-        'BUILTIN\Account Operators'                                   = 'S-1-5-32-548'; `
-        'BUILTIN\Server Operators'                                    = 'S-1-5-32-549'; `
-        'BUILTIN\Pre-Windows 2000 Compatible Access'                  = 'S-1-5-32-554'; `
-        'BUILTIN\Terminal Server License Servers'                     = 'S-1-5-32-561'; `
-        'BUILTIN\Windows Authorization Access Group'                  = 'S-1-5-32-560'
-}
-$dicWellKnownSids = @{'S-1-0' = 'Null Authority'; `
+$global:dicRightsGuids = @{}
+$global:dicSidToName = @{}
+$global:dicSidToObject = @{}
+$global:dicWellKnownSids = @{'S-1-0' = 'Null Authority'; `
         'S-1-0-0'                    = 'Nobody'; `
         'S-1-1'                      = 'World Authority'; `
         'S-1-1-0'                    = 'Everyone'; `
@@ -8889,79 +8877,117 @@ function Get-ObjectTypeFromSid {
 # Description   : Try to translate the SID if it fails it try to match a Well-Known.
 #==========================================================================
 function Convert-SidToName {
-    Param($server, $sid,
+    <#
+    .SYNOPSIS
+        Resolves a SID to a principal name (DOMAIN\SamAccountName).
+    .DESCRIPTION
+        Resolution order:
+          1. Session cache ($global:dicSidToName)
+          2. Local SID translation (SecurityIdentifier.Translate)
+          3. Well-known SIDs dictionary
+          4. LDAP search by <SID=...> binding DN
+        Falls back to the raw SID string if nothing resolves.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    Param(
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Server,
+
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Sid,
+
         [Parameter(Mandatory = $false)]
-        [pscredential]
-        $CREDS)
+        [pscredential]$CREDS
+    )
 
-    $strAccNameTranslation = ''
-
-
-    If ($dicWellKnownSids.ContainsKey($sid)) {
-        $strAccNameTranslation = $dicWellKnownSids.Item($sid)
-        return $strAccNameTranslation
+    # Ensure cache exists
+    if (-not $global:dicSidToName) {
+        $global:dicSidToName = @{}
     }
 
-    $ID = New-Object System.Security.Principal.SecurityIdentifier($sid)
+    # 1. Cache lookup
+    if ($global:dicSidToName.ContainsKey($Sid)) {
+        return $global:dicSidToName[$Sid]
+    }
 
-    try{
-        $User = $ID.Translate( [System.Security.Principal.NTAccount])
-        $strAccNameTranslation = $User.Value
-        return $strAccNameTranslation
+    # 2. Local translation
+    try {
+        $id = New-Object System.Security.Principal.SecurityIdentifier($Sid)
+        $name = $id.Translate([System.Security.Principal.NTAccount]).Value
+        if (-not [string]::IsNullOrEmpty($name)) {
+            $global:dicSidToName[$Sid] = $name
+            return $name
+        }
+    }
+    catch [System.ArgumentException] {
+        # Not a valid SID string at all - don't bother with further lookups
+        Write-Verbose "Convert-SidToName: '$Sid' is not a valid SID format."
+        return $Sid
     }
     catch {
-
+        Write-Verbose "Convert-SidToName: local translation failed for $Sid : $($_.Exception.Message)"
     }
 
-    if ($strAccNameTranslation -eq '') {
+    # 3. Well-known SIDs dictionary
+    if ($global:dicWellKnownSids -and $global:dicWellKnownSids.ContainsKey($Sid)) {
+        $name = $global:dicWellKnownSids[$Sid]
+        $global:dicSidToName[$Sid] = $name
+        return $name
+    }
 
-        If ($global:dicSidToName.ContainsKey($sid)) {
-            $strAccNameTranslation = $global:dicSidToName.Item($sid)
-            return $strAccNameTranslation
-        } else {
+    # 4. LDAP search using the <SID=...> binding syntax
+    $ldapConnection = $null
+    try {
+        $ldapConnection = Connect-SecureLDAP -Server $Server -Credential $CREDS
+        $ldapConnection.SessionOptions.ReferralChasing = 'None'
 
+        $request = New-Object System.DirectoryServices.Protocols.SearchRequest
+        if ($global:bolShowDeleted) {
+            $LDAP_SERVER_SHOW_DELETED_OID = '1.2.840.113556.1.4.417'
+            [void]$request.Controls.Add(
+                (New-Object System.DirectoryServices.Protocols.DirectoryControl `
+                    -ArgumentList $LDAP_SERVER_SHOW_DELETED_OID, $null, $false, $true))
+        }
+        $request.DistinguishedName = "<SID=$Sid>"
+        $request.Filter = '(name=*)'
+        $request.Scope = 'Base'
+        [void]$request.Attributes.Add('samaccountname')
 
-            $LDAPConnection = Connect-SecureLDAP -Server $server -Credential $CREDS ; Write-verbose "Calling Connect-SecureLDAP at: $((Get-PSCallStack).ScriptLineNumber[0])"
+        $response = $ldapConnection.SendRequest($request)
 
-            $LDAPConnection.SessionOptions.ReferralChasing = 'None'
-            $request = New-Object System.directoryServices.Protocols.SearchRequest
-            if ($global:bolShowDeleted) {
-                [string] $LDAP_SERVER_SHOW_DELETED_OID = '1.2.840.113556.1.4.417'
-                [void]$request.Controls.Add((New-Object 'System.DirectoryServices.Protocols.DirectoryControl' -ArgumentList "$LDAP_SERVER_SHOW_DELETED_OID", $null, $false, $true ))
+        if ($response.Entries.Count -gt 0) {
+            $entry = $response.Entries[0]
+
+            if ($entry.Attributes['samaccountname']) {
+                $name = '{0}\{1}' -f $global:strDomainShortName, $entry.Attributes['samaccountname'][0]
+                $global:dicSidToName[$Sid] = $name
+                return $name
             }
-            $request.DistinguishedName = "<SID=$sid>"
-            $request.Filter = '(name=*)'
-            $request.Scope = 'Base'
-            [void]$request.Attributes.Add('samaccountname')
-            try {
-                $response = $LDAPConnection.SendRequest($request)
-                $result = $response.Entries[0]
-                if($result.attributes.samaccountname) {
-                    $strAccNameTranslation = $global:strDomainShortName + '\' + $result.attributes.samaccountname[0]
-                    if (($strAccNameTranslation) -and ($strAccNameTranslation -ne '')) {
-                        return  $strAccNameTranslation
-                    }
-                    
-                }
-                
 
-            } catch {
-
+            # No samaccountname (e.g. some deleted or foreign objects) - use the DN
+            if (-not [string]::IsNullOrEmpty($entry.DistinguishedName)) {
+                $global:dicSidToName[$Sid] = $entry.DistinguishedName
+                return $entry.DistinguishedName
             }
-
-            if (!($strAccNameTranslation)) {
-                $strAccNameTranslation = $result.distinguishedname
-            }
-            $global:dicSidToName.Add($sid, $strAccNameTranslation)
         }
 
+        # Object genuinely not found - safe to cache the raw SID
+        $global:dicSidToName[$Sid] = $Sid
+        return $Sid
     }
-
-    If (($strAccNameTranslation -eq $nul) -or ($strAccNameTranslation -eq '')) {
-        $strAccNameTranslation = $sid
+    catch {
+        # Transient/connection/auth errors: do NOT cache, so a later call can retry
+        Write-Verbose "Convert-SidToName: LDAP lookup failed for $Sid : $($_.Exception.Message)"
+        return $Sid
     }
-
-    return $strAccNameTranslation
+    finally {
+        if ($ldapConnection -is [System.IDisposable]) {
+            $ldapConnection.Dispose()
+        }
+    }
 }
 #==========================================================================
 # Function		: Get-Criticality
@@ -8971,6 +8997,23 @@ function Convert-SidToName {
 #==========================================================================
 Function Get-Criticality {
     Param($Returns = 'Filter', $objIdentity, $objRights, $objAccess, $objFlags, $objInheritanceType, $objObjectType, $objInheritedObjectType, [int]$CriticalityFilter = 0)
+
+    # Low criticality object types - these are always treated as Low regardless of rights
+    $lowCriticalityObjectTypes = @(
+        '018849b0-a981-11d2-a9ff-00c04f8eedd8',  # msExchDynamicDistributionList
+        '4828cc14-1437-45bc-9b07-ad6f015e5f28',  # msExchActiveSyncDevices
+        '66437984-c3c5-498f-b269-987819ef484b',  # msExchBlockedSendersHash
+        'ab721a55-1e2f-11d0-9819-00aa0040529b',  # Send To
+        'a1990816-4298-11d1-ade2-00c04fd8d5cd'  # Open Address List
+    )
+
+    if ($objObjectType -in $lowCriticalityObjectTypes -or $objInheritedObjectType -in $lowCriticalityObjectTypes) {
+        if ($Returns -eq 'Filter') {
+            return (1 -ge $CriticalityFilter)
+        } else {
+            return 1
+        }
+    }
 
     $intCriticalityLevel = 0
 
@@ -12592,10 +12635,7 @@ Function Get-Perm {
                                 $CanonicalName = Create-CanonicalName $DSobject.distinguishedname.toString()
                             }
                         }
-                        $strNTAccount = $sd[$index].IdentityReference.ToString()
-                        If ($strNTAccount.contains('S-1-')) {
-                            $strNTAccount = Convert-SidToName -server $global:strDomainFQDN -Sid $strNTAccount -CREDS $CREDS
-                        }
+
                         #Remove Default Permissions if SkipDefaultPerm selected
                         if($SkipDefaultPerm -and (-not($SDDL))) {
                             if ($strObjectClass -ne $strTemoObjectClass) {
@@ -12686,7 +12726,7 @@ Function Get-Perm {
                     $bolACLExist = $false
                     if (($permcount -eq 0) -and ($index -gt 0)) {
                         $bolOUHeader = $true
-                        Write-ToFile -bolACLExist $bolACLExist -sd $sd -DSObject $strDistinguishedName -Canonical $CanonicalName -OUHeader $bolOUHeader -strColorTemp "1"  -htmfileout $strFileHTA -CompareMode $bolCompare -boolReplMetaDate $bolReplMeta -strReplMetaDate $objLastChange -boolACLSize $bolACLsize -strACLSize $strACLSize -bolShowOUProtected $bolGetOUProtected -bolOUPRotected $bolOUProtected -bolShowCriticalityColor $bolShowCriticalityColor -bolTranslateGUID $bolGUIDtoText -strObjClass $strObjectClass $OutputFormat -GPO $GPO -GPODisplayname $GPOdisplayname -bolCriticalityLevel $bolShowCriticalityColor -strSDDL $strSDDL -CREDS $CREDS
+                        Write-ToFile -bolACLExist $bolACLExist -sd $sd -DSObject $strDistinguishedName -Canonical $CanonicalName -OUHeader $bolOUHeader -strColorTemp "1"  -htmfileout $strFileHTA -CompareMode $bolCompare -boolReplMetaDate $bolReplMeta -strReplMetaDate $objLastChange -boolACLSize $bolACLsize -strACLSize $strACLSize -bolShowOUProtected $bolGetOUProtected -bolOUPRotected $bolOUProtected -bolShowCriticalityColor $bolShowCriticalityColor -bolTranslateGUID $bolGUIDtoText -strObjClass $strObjectClass -Type $OutputFormat -GPO $GPO -GPODisplayname $GPOdisplayname -bolCriticalityLevel $bolShowCriticalityColor -strSDDL $strSDDL -CREDS $CREDS
                         $aclcount++
                     }# End If
                 }# End if bolCSVOnly
@@ -15920,7 +15960,7 @@ if ($base -or $GPO) {
     #Check if a naming context is selected
     If ($bolConnected -eq $true) {
         If (!($strLastCacheGuidsDom -eq $global:strDomainDNName)) {
-            $global:dicRightsGuids = @{'Seed' = 'xxx' }
+            $global:dicRightsGuids = @{}
             CacheRightsGuids -CREDS $CREDS
             $strLastCacheGuidsDom = $global:strDomainDNName
         }
@@ -16278,7 +16318,7 @@ else {
             If ($bolConnected -eq $true) {
                 Write-Verbose "Connected"
                 If (!($strLastCacheGuidsDom -eq $global:strDomainDNName)) {
-                    $global:dicRightsGuids = @{'Seed' = 'xxx' }
+                    $global:dicRightsGuids = @{}
                     CacheRightsGuids -CREDS $CREDS
                     $strLastCacheGuidsDom = $global:strDomainDNName
                 }
