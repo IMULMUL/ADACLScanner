@@ -2,15 +2,15 @@
 
 ## Current version
 
-**Version: 9.5**
+**Version: 9.6**
 
-**6 May, 2026**
-
-**SHA256:** 39B7AC46C680D20448B46B315E3082C7FECA53D6D0B12FE610B0E54CCE6423CE
+**7 July, 2026**
 
 **Fixes**
-* Missing check of Well-Known Sids
+* Bug in returning names to SID
+* Bug in function call, missing parameter name
 
+**SHA256:** 64816BBE6D9E66D62CF7FF9297832417DD22ED7EAE49BAC9C59F2A85A6E30713
 
 
 ## Examples
